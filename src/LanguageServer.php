@@ -67,7 +67,7 @@ class LanguageServer extends AdvancedJsonRpc\Dispatcher
                 $error = $e;
             } catch (Throwable $e) {
                 // If an unexpected error occured, send back an INTERNAL_ERROR error response
-                $error = new AdvancedJsonRpc\Error($e->getMessage(), AdvancedJsonRpc\ErrorCode::INTERNAL_ERROR, null, $e);
+                $error = new AdvancedJsonRpc\Error((string)$e, AdvancedJsonRpc\ErrorCode::INTERNAL_ERROR, null, $e);
             }
             // Only send a Response for a Request
             // Notifications do not send Responses
@@ -206,11 +206,11 @@ class LanguageServer extends AdvancedJsonRpc\Dispatcher
     {
         $cacheDir = $this->rootPath . '/.phpls';
         if (is_dir($cacheDir)) {
-            if (file_exists($cacheDir . '/symbols')) {
-                $symbols = unserialize(file_get_contents($cacheDir . '/symbols'));
-                $count = count($symbols);
-                $this->project->setSymbols($symbols);
-                $this->client->window->logMessage(MessageType::INFO, "Restoring $count symbols");
+            if (file_exists($cacheDir . '/definitions')) {
+                $definitions = unserialize(file_get_contents($cacheDir . '/definitions'));
+                $count = count($definitions);
+                $this->project->setDefinitions($definitions);
+                $this->client->window->logMessage(MessageType::INFO, "Restoring $count definitions");
             }
             if (file_exists($cacheDir . '/references')) {
                 $references = unserialize(file_get_contents($cacheDir . '/references'));
@@ -236,10 +236,10 @@ class LanguageServer extends AdvancedJsonRpc\Dispatcher
             mkdir($cacheDir);
         }
 
-        $symbols = $this->project->getSymbols();
-        $count = count($symbols);
-        $this->client->window->logMessage(MessageType::INFO, "Saving $count symbols to cache");
-        file_put_contents($cacheDir . "/symbols", serialize($symbols));
+        $definitions = $this->project->getDefinitions();
+        $count = count($definitions);
+        $this->client->window->logMessage(MessageType::INFO, "Saving $count definitions to cache");
+        file_put_contents($cacheDir . "/definitions", serialize($definitions));
 
         $references = $this->project->getReferenceUris();
         $count = array_sum(array_map('count', $references));

@@ -39,13 +39,10 @@ class Workspace
      */
     public function symbol(string $query): array
     {
-        if ($query === '') {
-            return array_values($this->project->getSymbols());
-        }
         $symbols = [];
-        foreach ($this->project->getSymbols() as $fqn => $symbol) {
+        foreach ($this->project->getDefinitions() as $fqn => $definition) {
             if (stripos($fqn, $query) !== false) {
-                $symbols[] = $symbol;
+                $symbols[] = $definition->symbolInformation;
             }
         }
         return $symbols;

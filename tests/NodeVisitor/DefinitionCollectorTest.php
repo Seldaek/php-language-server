@@ -27,7 +27,7 @@ class DefinitionCollectorTest extends TestCase
         $traverser->addVisitor($definitionCollector);
         $stmts = $parser->parse(file_get_contents($uri));
         $traverser->traverse($stmts);
-        $defs = $definitionCollector->definitions;
+        $defs = $definitionCollector->definitionNodes;
         $this->assertEquals([
             'TestNamespace\\TEST_CONST',
             'TestNamespace\\TestClass',
@@ -66,7 +66,7 @@ class DefinitionCollectorTest extends TestCase
         $traverser->addVisitor($definitionCollector);
         $stmts = $parser->parse(file_get_contents($uri));
         $traverser->traverse($stmts);
-        $defs = $definitionCollector->definitions;
+        $defs = $definitionCollector->definitionNodes;
         $this->assertEquals(['TestNamespace\\whatever()'], array_keys($defs));
         $this->assertInstanceOf(Node\Stmt\Function_::class, $defs['TestNamespace\\whatever()']);
     }

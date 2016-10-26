@@ -76,6 +76,13 @@ class PhpDocument
      *
      * @var Node[]
      */
+    private $definitionNodes;
+
+    /**
+     * Map from FQN to Definition
+     *
+     * @var Definition[]
+     */
     private $definitions;
 
     /**
@@ -187,15 +194,15 @@ class PhpDocument
 
             // Unregister old definitions
             if (isset($this->definitions)) {
-                foreach ($this->definitions as $fqn => $node) {
-                    $this->project->removeSymbol($fqn);
+                foreach ($this->definitions as $fqn => $definition) {
+                    $this->project->removeDefinition($fqn);
                 }
             }
             // Register this document on the project for all the symbols defined in it
+            $this->definitionNodes = $definitionCollector->definitionNodes;
             $this->definitions = $definitionCollector->definitions;
-            $this->symbols = $definitionCollector->symbols;
-            foreach ($definitionCollector->symbols as $fqn => $symbol) {
-                $this->project->setSymbol($fqn, $symbol);
+            foreach ($this->definitions as $fqn => $definition) {
+                $this->project->setDefinition($fqn, $definition);
             }
 
             // Unregister old references
@@ -275,10 +282,10 @@ class PhpDocument
     }
 
     /**
-     * Returns the definition node for a fully qualified name
+     * Returns the Definition for a fully qualified name
      *
      * @param string $fqn
-     * @return Node|null
+     * @return Definition|null
      */
     public function getDefinitionByFqn(string $fqn)
     {
@@ -286,23 +293,34 @@ class PhpDocument
     }
 
     /**
+     * Returns the definition node for a fully qualified name
+     *
+     * @param string $fqn
+     * @return Node|null
+     */
+    public function getDefinitionNodeByFqn(string $fqn)
+    {
+        return $this->definitionNodes[$fqn] ?? null;
+    }
+
+    /**
      * Returns a map from fully qualified name (FQN) to Nodes defined in this document
      *
      * @return Node[]
      */
-    public function getDefinitions()
+    public function getDefinitionNodes()
     {
-        return $this->definitions;
+        return $this->definitionNodes;
     }
 
     /**
      * Returns a map from fully qualified name (FQN) to SymbolInformation
      *
-     * @return SymbolInformation[]
+     * @return Definition[]
      */
-    public function getSymbols()
+    public function getDefinitions()
     {
-        return $this->symbols;
+        return $this->definitions;
     }
 
     /**
@@ -314,41 +332,6 @@ class PhpDocument
     public function isDefined(string $fqn): bool
     {
         return isset($this->definitions[$fqn]);
-    }
-
-    /**
-     * Returns the definition node for any node
-     * The definition node MAY be in another document, check the ownerDocument attribute
-     *
-     * @param Node $node
-     * @return Node|null
-     */
-    public function getDefinitionByNode(Node $node)
-    {
-        // Variables always stay in the boundary of the file and need to be searched inside their function scope
-        // by traversing the AST
-        if ($node instanceof Node\Expr\Variable) {
-            return getVariableDefinition($node);
-        }
-        $fqn = getReferencedFqn($node);
-        if (!isset($fqn)) {
-            return null;
-        }
-        $document = $this->project->getDefinitionDocument($fqn);
-        if (!isset($document)) {
-            // If the node is a function or constant, it could be namespaced, but PHP falls back to global
-            // http://php.net/manual/en/language.namespaces.fallback.php
-            $parent = $node->getAttribute('parentNode');
-            if ($parent instanceof Node\Expr\ConstFetch || $parent instanceof Node\Expr\FuncCall) {
-                $parts = explode('\\', $fqn);
-                $fqn = end($parts);
-                $document = $this->project->getDefinitionDocument($fqn);
-            }
-        }
-        if (!isset($document)) {
-            return null;
-        }
-        return $document->getDefinitionByFqn($fqn);
     }
 
     /**

@@ -20,6 +20,7 @@ use LanguageServer\Protocol\{
     Hover,
     MarkedString
 };
+use function LanguageServer\Fqn\{getDefinedFqn, getVariableDefinition, getReferencedFqn};
 
 /**
  * Provides method handlers for all textDocument/* methods
@@ -59,7 +60,11 @@ class TextDocument
      */
     public function documentSymbol(TextDocumentIdentifier $textDocument): array
     {
-        return array_values($this->project->getDocument($textDocument->uri)->getSymbols());
+        $symbols = [];
+        foreach ($this->project->getDocument($textDocument->uri)->getDefinitions() as $fqn => $definition) {
+            $symbols[] = $definition->symbolInformation;
+        }
+        return $symbols;
     }
 
     /**
@@ -149,11 +154,20 @@ class TextDocument
         if ($node === null) {
             return [];
         }
-        $def = $document->getDefinitionByNode($node);
+        // Variables always stay in the boundary of the file and need to be searched inside their function scope
+        // by traversing the AST
+        if ($node instanceof Node\Expr\Variable) {
+            $defNode = getVariableDefinition($node);
+            if ($defNode === null) {
+                return [];
+            }
+            return Location::fromNode($defNode);
+        }
+        $def = $this->project->getDefinitionByNode($node);
         if ($def === null) {
             return [];
         }
-        return Location::fromNode($def);
+        return $def->symbolInformation->location;
     }
 
     /**
@@ -173,7 +187,7 @@ class TextDocument
         }
         $range = Range::fromNode($node);
         // Get the definition node for whatever node is under the cursor
-        $def = $document->getDefinitionByNode($node);
+        $def = $this->project->getDefinitionNodeByNode($node);
         if ($def === null) {
             return new Hover([], $range);
         }

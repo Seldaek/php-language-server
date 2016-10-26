@@ -5,7 +5,8 @@ namespace LanguageServer;
 
 use LanguageServer\Protocol\SymbolInformation;
 use phpDocumentor\Reflection\DocBlockFactory;
-use PhpParser\{ParserFactory, Lexer};
+use PhpParser\{ParserFactory, Lexer, Node};
+use function LanguageServer\Fqn\{getDefinedFqn, getVariableDefinition, getReferencedFqn};
 
 class Project
 {
@@ -18,23 +19,23 @@ class Project
     private $documents = [];
 
     /**
-     * An associative array that maps fully qualified symbol names to SymbolInformations
+     * An associative array that maps fully qualified symbol names to definitions
      *
-     * @var SymbolInformation[]
+     * @var Definition[]
      */
-    private $symbols = [];
+    private $definitions = [];
 
     /**
      * An associative array that maps fully qualified symbol names to arrays of document URIs that reference the symbol
      *
-     * @var PhpDocument[][]
+     * @var string[][]
      */
     private $references = [];
 
     /**
      * Instance of the PHP parser
      *
-     * @var ParserAbstract
+     * @var \PhpParser\Parser
      */
     private $parser;
 
@@ -138,48 +139,106 @@ class Project
     }
 
     /**
-     * Returns an associative array [string => string] that maps fully qualified symbol names
-     * to URIs of the document where the symbol is defined
+     * Returns an associative array [string => Definition] that maps fully qualified symbol names
+     * to definitions
      *
-     * @return SymbolInformation[]
+     * @return Definition[]
      */
-    public function getSymbols()
+    public function getDefinitions()
     {
-        return $this->symbols;
+        return $this->definitions;
     }
 
     /**
-     * Adds a SymbolInformation for a specific symbol
+     * @param Node $node
+     * @return Definition|null
+     */
+    public function getDefinitionByNode(Node $node)
+    {
+        if ($node instanceof Node\Expr\Variable) {
+            throw new \Exception('Cannot get Definition object of variable');
+        }
+        $fqn = getReferencedFqn($node);
+        if (!isset($fqn)) {
+            return null;
+        }
+        $document = $this->getDefinitionDocument($fqn);
+        if (!isset($document)) {
+            // If the node is a function or constant, it could be namespaced, but PHP falls back to global
+            // http://php.net/manual/en/language.namespaces.fallback.php
+            $parent = $node->getAttribute('parentNode');
+            if ($parent instanceof Node\Expr\ConstFetch || $parent instanceof Node\Expr\FuncCall) {
+                $parts = explode('\\', $fqn);
+                $fqn = end($parts);
+                $document = $this->getDefinitionDocument($fqn);
+            }
+        }
+        if (!isset($document)) {
+            return null;
+        }
+        return $document->getDefinitionByFqn($fqn);
+    }
+
+    public function getDefinitionNodeByNode(Node $node)
+    {
+        // Variables always stay in the boundary of the file and need to be searched inside their function scope
+        // by traversing the AST
+        if ($node instanceof Node\Expr\Variable) {
+            return getVariableDefinition($node);
+        }
+        $fqn = getReferencedFqn($node);
+        if (!isset($fqn)) {
+            return null;
+        }
+        $document = $this->getDefinitionDocument($fqn);
+        if (!isset($document)) {
+            // If the node is a function or constant, it could be namespaced, but PHP falls back to global
+            // http://php.net/manual/en/language.namespaces.fallback.php
+            $parent = $node->getAttribute('parentNode');
+            if ($parent instanceof Node\Expr\ConstFetch || $parent instanceof Node\Expr\FuncCall) {
+                $parts = explode('\\', $fqn);
+                $fqn = end($parts);
+                $document = $this->getDefinitionDocument($fqn);
+            }
+        }
+        if (!isset($document)) {
+            return null;
+        }
+        return $document->getDefinitionNodeByFqn($fqn);
+
+    }
+
+    /**
+     * Adds a Definition for a specific symbol
      *
      * @param string $fqn The fully qualified name of the symbol
-     * @param string $uri The URI
+     * @param Definition $definition The URI
      * @return void
      */
-    public function setSymbol(string $fqn, SymbolInformation $symbol)
+    public function setDefinition(string $fqn, Definition $definition)
     {
-        $this->symbols[$fqn] = $symbol;
+        $this->definition[$fqn] = $definition;
     }
 
     /**
-     * Sets the SymbolInformation index
+     * Sets the Definition index
      *
-     * @param SymbolInformation[] $symbols
+     * @param Definition[] $definitions
      * @return void
      */
-    public function setSymbols(array $symbols)
+    public function setDefinitions(array $definitions)
     {
-        $this->symbols = $symbols;
+        $this->definitions = $definitions;
     }
 
     /**
-     * Unsets the SymbolInformation for a specific symbol
-     * and removes all references pointing to that symbol
+     * Removes a definition and removes all references pointing to that definition
      *
-     * @param string $fqn The fully qualified name of the symbol
+     * @param string $fqn The fully qualified name of the definition
      * @return void
      */
-    public function removeSymbol(string $fqn) {
-        unset($this->symbols[$fqn]);
+    public function removeDefinition(string $fqn) {
+        unset($this->definitions[$fqn]);
         unset($this->references[$fqn]);
     }
 
@@ -262,7 +321,10 @@ class Project
      */
     public function getDefinitionDocument(string $fqn)
     {
-        return isset($this->symbols[$fqn]) ? $this->getDocument($this->symbols[$fqn]->location->uri) : null;
+        if (!isset($this->definitions[$fqn])) {
+            return null;
+        }
+        return $this->getDocument($this->definitions[$fqn]->symbolInformation->location->uri);
     }
 
     /**

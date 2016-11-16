@@ -52,6 +52,18 @@ class LanguageServerTest extends TestCase
         ], $msg->body->result);
     }
 
+    public function testInitializeWithUri()
+    {
+        $server = new LanguageServer(new MockProtocolStream, new MockProtocolStream);
+        $server->initialize('file:///c:/users/felix', getmypid(), new ClientCapabilities)->wait();
+    }
+
+    public function testInitializeWithWindowsPath()
+    {
+        $server = new LanguageServer(new MockProtocolStream, new MockProtocolStream);
+        $server->initialize('file:///c:/users/felix', getmypid(), new ClientCapabilities)->wait();
+    }
+
     public function testIndexingWithDirectFileAccess()
     {
         $promise = new Promise;
